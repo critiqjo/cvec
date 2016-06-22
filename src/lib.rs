@@ -1,5 +1,4 @@
 #![feature(alloc)]
-#![feature(dropck_parametricity)]
 
 extern crate alloc;
 
@@ -38,14 +37,13 @@ impl<T> CVecRaw<T> {
 }
 
 impl<T> Drop for CVecRaw<T> {
-    #[unsafe_destructor_blind_to_params]
     fn drop(&mut self) {
         let buf = self.buf();
-        if buf.unsafe_no_drop_flag_needs_drop() {
-            unsafe {
-                let s = slice::from_raw_parts_mut(buf.ptr(), self.len());
-                atomic::fence(Ordering::SeqCst);
-                ptr::drop_in_place(s);
+        let len = self.len();
+        atomic::fence(Ordering::Acquire);
+        unsafe {
+            for p in slice::from_raw_parts_mut(buf.ptr(), len) {
+                ptr::drop_in_place(p as *mut T);
             }
         }
     }
