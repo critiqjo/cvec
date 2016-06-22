@@ -8,7 +8,7 @@ use alloc::raw_vec::RawVec;
 use std::cell::UnsafeCell;
 use std::ptr;
 use std::slice;
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::{self, AtomicUsize, Ordering};
 use std::sync::Arc;
 
 struct CVecRaw<T> {
@@ -33,7 +33,7 @@ impl<T> CVecRaw<T> {
     }
 
     fn len(&self) -> usize {
-        self.len.load(Ordering::Acquire)
+        self.len.load(Ordering::Relaxed)
     }
 }
 
@@ -44,6 +44,7 @@ impl<T> Drop for CVecRaw<T> {
         if buf.unsafe_no_drop_flag_needs_drop() {
             unsafe {
                 let s = slice::from_raw_parts_mut(buf.ptr(), self.len());
+                atomic::fence(Ordering::SeqCst);
                 ptr::drop_in_place(s);
             }
         }
@@ -105,7 +106,9 @@ impl<T> CVecView<T> {
     pub fn as_slice(&self) -> &[T] {
         unsafe {
             let p = self.inner.buf().ptr();
-            slice::from_raw_parts(p, self.inner.len())
+            let len = self.len();
+            atomic::fence(Ordering::Acquire);
+            slice::from_raw_parts(p, len)
         }
     }
 
@@ -147,11 +150,16 @@ mod tests {
         let b2 = b1.clone();
         let h = thread::spawn(move || {
             b2.wait();
+            while xv.len() < 1 {}
+            assert_eq!(xv.as_slice()[0], 300);
+            while xv.len() < 2 {}
             assert_eq!(xv.as_slice(), [300, 200]);
         });
-        x.push(300).unwrap();
-        x.push(200).unwrap();
         b1.wait();
+        for _ in 0..1000 {}
+        x.push(300).unwrap();
+        for _ in 0..1000 {}
+        x.push(200).unwrap();
         h.join().unwrap();
     }
 
