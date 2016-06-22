@@ -81,10 +81,6 @@ impl<T> CVec<T> {
         Ok(())
     }
 
-    pub fn shrink_to_fit(&mut self) {
-        unsafe { self.inner.buf_mut().shrink_to_fit(self.len()) }
-    }
-
     pub fn try_reserve(&mut self, additional: usize) -> bool {
         unsafe { self.inner.buf_mut().reserve_in_place(self.len(), additional) }
     }
@@ -163,11 +159,10 @@ mod tests {
 
     #[test]
     fn resize() {
-        let mut x: CVec<usize> = CVec::with_capacity(3);
+        let mut x: CVec<usize> = CVec::with_capacity(2);
         let xv = x.view();
         x.push(300).unwrap();
         x.push(200).unwrap();
-        x.shrink_to_fit();
         if x.push(100).is_ok() {
             // never observed to reach here
             assert_eq!(xv.as_slice(), [300, 200, 100]);
