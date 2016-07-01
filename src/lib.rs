@@ -77,7 +77,7 @@ impl<T> CVec<T> {
             let end = self.inner.buf().ptr().offset(len as isize);
             ptr::write(end, value);
         }
-        self.inner.len.fetch_add(1, Ordering::Release);
+        self.inner.len.store(len + 1, Ordering::Release); // no need to cas
         Ok(())
     }
 
@@ -89,8 +89,6 @@ impl<T> CVec<T> {
         CVecView { inner: self.inner.clone() }
     }
 }
-
-unsafe impl<T> Send for CVec<T> where T: Send + Sync {}
 
 pub struct CVecView<T> {
     inner: Arc<CVecRaw<T>>,
